@@ -1,0 +1,115 @@
+{
+    "uid": "mlops-api-overview",
+    "title": "MLOps API Overview",
+    "timezone": "browser",
+    "schemaVersion": 38,
+    "version": 1,
+    "refresh": "5s",
+    "time": {
+        "from": "now-1h",
+        "to": "now"
+    },
+    "panels": [
+        {
+            "type": "stat",
+            "title": "Requests /s",
+            "gridPos": {
+                "x": 0,
+                "y": 0,
+                "w": 6,
+                "h": 4
+            },
+            "targets": [
+                {
+                    "expr": "sum(rate(california_housing_requests_total[1m]))",
+                    "legendFormat": "all"
+                }
+            ]
+        },
+        {
+            "type": "stat",
+            "title": "Predictions /s",
+            "gridPos": {
+                "x": 6,
+                "y": 0,
+                "w": 6,
+                "h": 4
+            },
+            "targets": [
+                {
+                    "expr": "sum(rate(california_housing_predictions_total[1m]))",
+                    "legendFormat": "all"
+                }
+            ]
+        },
+        {
+            "type": "graph",
+            "title": "Request Latency p95 (ms)",
+            "gridPos": {
+                "x": 0,
+                "y": 4,
+                "w": 12,
+                "h": 8
+            },
+            "targets": [
+                {
+                    "expr": "histogram_quantile(0.95, sum(rate(california_housing_request_duration_seconds_bucket[5m])) by (le, endpoint)) * 1000",
+                    "legendFormat": "{{endpoint}}"
+                }
+            ],
+            "lines": true,
+            "linewidth": 2
+        },
+        {
+            "type": "graph",
+            "title": "Prediction Latency p95 (ms)",
+            "gridPos": {
+                "x": 0,
+                "y": 12,
+                "w": 12,
+                "h": 8
+            },
+            "targets": [
+                {
+                    "expr": "histogram_quantile(0.95, sum(rate(california_housing_prediction_duration_seconds_bucket[5m])) by (le)) * 1000",
+                    "legendFormat": "predict"
+                }
+            ],
+            "lines": true,
+            "linewidth": 2
+        },
+        {
+            "type": "gauge",
+            "title": "CPU %",
+            "gridPos": {
+                "x": 0,
+                "y": 20,
+                "w": 6,
+                "h": 6
+            },
+            "targets": [
+                {
+                    "expr": "cpu_percent"
+                }
+            ]
+        },
+        {
+            "type": "gauge",
+            "title": "Memory %",
+            "gridPos": {
+                "x": 6,
+                "y": 20,
+                "w": 6,
+                "h": 6
+            },
+            "targets": [
+                {
+                    "expr": "memory_percent"
+                }
+            ]
+        }
+    ],
+    "templating": {
+        "list": []
+    }
+}

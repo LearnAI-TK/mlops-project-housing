@@ -1,0 +1,32 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*.ipynb_checkpoints
+
+# Virtual environment
+.env
+.venv
+venv/
+ENV/
+
+# MLflow experiment tracking
+mlruns/
+
+# Logs and temporary files
+logs/
+*.log
+
+# Model artifacts
+models/
+
+# Data - raw & processed
+data/raw/
+data/processed/
+
+# DVC cache (if you are NOT pushing it to Git)
+.dvc/cache/
+
+# IDE configs
+.vscode/
+.idea/
+
