@@ -1,0 +1,5 @@
+[core]
+    remote = s3store
+['remote "s3store"']
+    url = s3://mlops-assign-housing-data/mlops-data
+    endpointurl = https://s3.amazonaws.com
