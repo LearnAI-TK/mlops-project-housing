@@ -82,32 +82,34 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Copy docker-compose and monitoring to EC2
       - name: Upload compose + monitoring to EC2
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ubuntu
           key: ${{ secrets.DEPLOY_SSH_KEY }}
-          source: "docker-compose.yml,deploy.sh,monitoring/**"
-          target: "/home/ubuntu/mlops-app"
+          source: |
+            docker-compose.yml
+            deploy.sh
+            monitoring/**
+          target: /home/ubuntu/mlops-app
           strip_components: 0
 
-      # Deploy (pull latest images + up)
-        name: Deploy via SSH
+      - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ubuntu
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           script_stop: true
+          command_timeout: 30m
           script: |
             set -euo pipefail
             cd /home/ubuntu/mlops-app
 
             # provide values for compose variable substitution
             export DOCKERHUB_USERNAME='${{ secrets.DOCKERHUB_USERNAME }}'
-            export IMAGE_TAG='latest'   # or '${{ github.ref_name }}' if you tag images per release
+            export IMAGE_TAG='latest'
 
             echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
 
