@@ -94,7 +94,7 @@ jobs:
           strip_components: 0
 
       # Deploy (pull latest images + up)
-      - name: Deploy via SSH
+        name: Deploy via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.EC2_HOST }}
@@ -105,17 +105,16 @@ jobs:
             set -euo pipefail
             cd /home/ubuntu/mlops-app
 
-            # Log into Docker Hub (non-interactive)
-            echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
+            # provide values for compose variable substitution
+            export DOCKERHUB_USERNAME='${{ secrets.DOCKERHUB_USERNAME }}'
+            export IMAGE_TAG='latest'   # or '${{ github.ref_name }}' if you tag images per release
 
-            # Pull latest images referenced by docker-compose.yml
+            echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
+
+            # sanity: show resolved images
+            docker compose config | sed -n 's/^[[:space:]]*image:[[:space:]]*//p'
+
             docker compose pull
-
-            # Start/refresh the stack
             docker compose up -d --remove-orphans
-
-            # (Optional) Clean old images
             docker image prune -f
-
-            # Show running services
             docker compose ps
