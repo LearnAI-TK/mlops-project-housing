@@ -55,11 +55,13 @@ services:
       MODEL_NAME: "CaliforniaHousingRegressor"
       MODEL_ALIAS: "staging"
       PYTHONUNBUFFERED: "1"
+      PYTHONPATH: /app
+    command: >
+      uvicorn src.api:app --app-dir /app --host 0.0.0.0 --port 8000
     volumes:
       - ./logs:/app/logs
       - ./models:/app/models
       - ./mlflow:/mlflow
-      - ./src:/app/src:ro
     restart: on-failure
     healthcheck:
       test: [ "CMD-SHELL", "curl -fsS http://localhost:8000/health >/dev/null || exit 1" ]
