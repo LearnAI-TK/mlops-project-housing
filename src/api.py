@@ -146,6 +146,7 @@ feature_names = None
 target_transformer = None
 model_version_str = "unknown"
 
+
 # ======================================
 # SQLite init
 # ======================================
@@ -179,6 +180,7 @@ def init_db():
     except Exception as e:
         logger.error(f"Failed to initialize SQLite database: {e}")
         raise
+
 
 # ======================================
 # Metrics helpers
@@ -216,6 +218,7 @@ def get_system_metrics():
         metrics["system_metrics_error"] = str(e)
     return metrics
 
+
 def get_prediction_metrics():
     """Aggregate prediction metrics from DB."""
     pred_metrics = {}
@@ -239,6 +242,7 @@ def get_prediction_metrics():
         logger.error(f"Error fetching prediction metrics: {e}")
         pred_metrics["prediction_metrics_error"] = str(e)
     return pred_metrics
+
 
 def get_recent_predictions(limit: int = 50) -> List[Dict[str, Any]]:
     """Return recent prediction rows from DB."""
@@ -274,12 +278,14 @@ def get_recent_predictions(limit: int = 50) -> List[Dict[str, Any]]:
         logger.error(f"Error fetching recent predictions: {e}")
     return out
 
+
 def get_all_metrics():
     m = {}
     m.update(get_prediction_metrics())
     m.update(get_system_metrics())
     m["recent_predictions"] = get_recent_predictions(limit=10)
     return m
+
 
 def update_prometheus_system_metrics():
     try:
@@ -295,6 +301,7 @@ def update_prometheus_system_metrics():
     except Exception as e:
         logger.error(f"Error updating Prometheus system metrics: {e}")
 
+
 # --- helper: efficient tail of a file ---
 def _tail_lines(path: str, max_lines: int):
     try:
@@ -303,8 +310,10 @@ def _tail_lines(path: str, max_lines: int):
     except FileNotFoundError:
         return None
 
+
 # --- helper: best-effort JSON extraction from a log line ---
 _json_obj_re = re.compile(r"\{.*\}")
+
 
 def _extract_json(line: str):
     try:
@@ -315,6 +324,7 @@ def _extract_json(line: str):
     except Exception:
         return None
 
+
 # ======================================
 # Model/Artifacts loader (single helper)
 # ======================================
@@ -324,17 +334,31 @@ def load_model_for_current_alias(redownload_artifacts: bool = True) -> str:
     load preprocessing + model, update globals, and return the version string.
     """
 
-    global ml_model, scaler, feature_transformer, feature_names, target_transformer, model_version_str
+    global \
+        ml_model, \
+        scaler, \
+        feature_transformer, \
+        feature_names, \
+        target_transformer, \
+        model_version_str
 
     # Use a global Mlflow client if present; otherwise make one
-    client = MLFLOW_CLIENT if "MLFLOW_CLIENT" in globals() and MLFLOW_CLIENT else MlflowClient()
+    client = (
+        MLFLOW_CLIENT
+        if "MLFLOW_CLIENT" in globals() and MLFLOW_CLIENT
+        else MlflowClient()
+    )
 
     mv = client.get_model_version_by_alias(MODEL_NAME, MODEL_ALIAS)
     if not mv:
-        raise RuntimeError(f"No model version found for alias '{MODEL_ALIAS}' of '{MODEL_NAME}'")
+        raise RuntimeError(
+            f"No model version found for alias '{MODEL_ALIAS}' of '{MODEL_NAME}'"
+        )
     run_id, version = mv.run_id, mv.version
     model_version_str = f"{MODEL_NAME}_v{version}"
-    logger.info(f"🎯 Using version {version} (run_id={run_id}) for alias '{MODEL_ALIAS}'")
+    logger.info(
+        f"🎯 Using version {version} (run_id={run_id}) for alias '{MODEL_ALIAS}'"
+    )
 
     # --- Download to the PARENT dir to avoid nested preprocessing/preprocessing ---
     if redownload_artifacts:
@@ -344,8 +368,12 @@ def load_model_for_current_alias(redownload_artifacts: bool = True) -> str:
             logger.info(f"📥 Downloading preprocessing artifacts from run {run_id} …")
             client.download_artifacts(run_id, "preprocessing", dst_path=download_root)
         except Exception as e:
-            logger.warning(f"Primary download failed: {e}; retrying with 'artifacts/preprocessing'")
-            client.download_artifacts(run_id, "artifacts/preprocessing", dst_path=download_root)
+            logger.warning(
+                f"Primary download failed: {e}; retrying with 'artifacts/preprocessing'"
+            )
+            client.download_artifacts(
+                run_id, "artifacts/preprocessing", dst_path=download_root
+            )
 
     # Resolve artifact directory; flatten if nested folder exists
     local_artifact_dir = os.path.join(MODEL_DIR, "preprocessing")
@@ -355,14 +383,21 @@ def load_model_for_current_alias(redownload_artifacts: bool = True) -> str:
             # If parent is empty (new download), move files up and remove nested dir
             if not any(os.scandir(local_artifact_dir)):
                 for name in os.listdir(nested):
-                    os.replace(os.path.join(nested, name), os.path.join(local_artifact_dir, name))
+                    os.replace(
+                        os.path.join(nested, name),
+                        os.path.join(local_artifact_dir, name),
+                    )
                 os.rmdir(nested)
                 logger.info("🧹 Flattened nested preprocessing directory.")
             else:
                 # Parent has files already; prefer parent, but log the situation
-                logger.warning("Nested preprocessing directory present but parent not empty; using parent.")
+                logger.warning(
+                    "Nested preprocessing directory present but parent not empty; using parent."
+                )
         except Exception as e:
-            logger.warning(f"Could not flatten nested preprocessing dir: {e}. Using nested path.")
+            logger.warning(
+                f"Could not flatten nested preprocessing dir: {e}. Using nested path."
+            )
             local_artifact_dir = nested
 
     # --- helpers ---
@@ -390,18 +425,33 @@ def load_model_for_current_alias(redownload_artifacts: bool = True) -> str:
     try:
         _ = _Identity
     except NameError:
+
         class _Identity:
-            def transform(self, X): return X
+            def transform(self, X):
+                return X
 
     # Try common names
     scaler_obj = _load_joblib_maybe(
-        ["scaler.pkl", "standard_scaler.pkl", "scaler.joblib", "*scaler*.pkl", "*scaler*.joblib"],
-        "Scaler"
+        [
+            "scaler.pkl",
+            "standard_scaler.pkl",
+            "scaler.joblib",
+            "*scaler*.pkl",
+            "*scaler*.joblib",
+        ],
+        "Scaler",
     )
     transformer_obj = _load_joblib_maybe(
-        ["power_transformer.pkl", "powertransformer.pkl", "column_transformer.pkl", "preprocessor.pkl",
-         "*transformer*.pkl", "*preprocess*.pkl", "*column*transformer*.pkl"],
-        "Feature transformer"
+        [
+            "power_transformer.pkl",
+            "powertransformer.pkl",
+            "column_transformer.pkl",
+            "preprocessor.pkl",
+            "*transformer*.pkl",
+            "*preprocess*.pkl",
+            "*column*transformer*.pkl",
+        ],
+        "Feature transformer",
     )
 
     scaler = scaler_obj or _Identity()
@@ -409,8 +459,12 @@ def load_model_for_current_alias(redownload_artifacts: bool = True) -> str:
 
     # feature names: .pkl or .json
     fn_path = _first(
-        "feature_names.pkl", "features.pkl", "feature_list.pkl",
-        "feature_names.json", "*.json", "*.pkl"
+        "feature_names.pkl",
+        "features.pkl",
+        "feature_list.pkl",
+        "feature_names.json",
+        "*.json",
+        "*.pkl",
     )
     if not fn_path:
         raise FileNotFoundError(
@@ -426,12 +480,16 @@ def load_model_for_current_alias(redownload_artifacts: bool = True) -> str:
         names = joblib.load(fn_path)
 
     if not isinstance(names, (list, tuple)):
-        raise ValueError(f"Feature names file must contain list/tuple; got {type(names)}")
+        raise ValueError(
+            f"Feature names file must contain list/tuple; got {type(names)}"
+        )
     feature_names = list(names)
 
     # optional target transformer
     tt_path = _first("target_transformer.pkl", "*target*transformer*.pkl")
-    target_transformer = joblib.load(tt_path) if tt_path and os.path.exists(tt_path) else None
+    target_transformer = (
+        joblib.load(tt_path) if tt_path and os.path.exists(tt_path) else None
+    )
 
     logger.info(
         "✅ Preprocessing set. "
@@ -464,6 +522,7 @@ async def lifespan(app: FastAPI):
     yield
     logger.info("🛑 API shutting down.")
 
+
 # ======================================
 # FastAPI app
 # ======================================
@@ -476,6 +535,7 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
+
 
 # ======================================
 # Middleware (logs + Prometheus)
@@ -505,6 +565,7 @@ async def log_requests_middleware(request: Request, call_next):
         REQUEST_DURATION.labels(
             method=request.method, endpoint=request.url.path
         ).observe(dur)
+
 
 # ======================================
 # Schemas
@@ -539,6 +600,7 @@ class PredictionRequest(BaseModel):
             raise ValueError("AveBedrms must be less than AveRooms")
         return v
 
+
 class PredictionResponse(BaseModel):
     predicted_price: float
     predicted_price_raw: float
@@ -546,12 +608,15 @@ class PredictionResponse(BaseModel):
     model_version: str
     status: str = "success"
 
+
 class RecentPredictionsResponse(BaseModel):
     predictions: List[Dict[str, Any]]
+
 
 # ---- helper: robust CSV reader (handles UTF-16/Windows encodings) ----
 def read_csv_smart(path, **kwargs):
     import pandas as pd
+
     encodings = ["utf-8", "utf-8-sig", "utf-16", "utf-16le", "cp1252", "latin1"]
     last_err = None
     for enc in encodings:
@@ -563,6 +628,7 @@ def read_csv_smart(path, **kwargs):
         f"Failed to read CSV '{path}' using encodings {encodings}. Last error: {last_err}"
     )
 
+
 # ======================================
 # Endpoints
 # ======================================
@@ -573,6 +639,7 @@ async def read_root():
         "docs": "/docs",
         "health": "/health",
     }
+
 
 @app.get("/health")
 async def health_check():
@@ -595,6 +662,7 @@ async def health_check():
         },
     }
     return JSONResponse(content=health_status, status_code=200 if status_ok else 503)
+
 
 @app.get("/model/info")
 async def model_info():
@@ -632,6 +700,7 @@ async def model_info():
                 "exception": str(e),
             },
         )
+
 
 @app.post("/predict", response_model=PredictionResponse)
 async def predict(request: Request, prediction_request: PredictionRequest):
@@ -716,7 +785,8 @@ async def predict(request: Request, prediction_request: PredictionRequest):
         update_prometheus_system_metrics()
 
         return PredictionResponse(
-            predicted_price=prediction_final * 100_000,  # adjust if your target scaling differs
+            predicted_price=prediction_final
+            * 100_000,  # adjust if your target scaling differs
             predicted_price_raw=prediction_final,
             timestamp=datetime.now().isoformat(),
             model_version=model_version_str,
@@ -725,20 +795,24 @@ async def predict(request: Request, prediction_request: PredictionRequest):
         logger.exception("Prediction failed")
         raise HTTPException(status_code=500, detail=f"Prediction error: {str(e)}")
 
+
 # ---- Metrics endpoints ----
 @app.get("/metrics")  # Prometheus default scrape path
 async def prometheus_metrics():
     return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
+
 @app.get("/metrics/json")  # Human-friendly, rich JSON metrics
 async def metrics_json():
     return JSONResponse(content=get_all_metrics())
+
 
 # ---- Recent predictions ----
 @app.get("/predictions/recent", response_model=RecentPredictionsResponse)
 async def get_recent_predictions_endpoint(limit: int = 50):
     limit = min(limit, 1000)
     return {"predictions": get_recent_predictions(limit=limit)}
+
 
 # ---- Reload endpoint (call once after training promotes alias) ----
 @app.post("/reload")
@@ -749,6 +823,7 @@ def reload_now():
     except Exception as e:
         logger.error(f"Reload failed: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Reload error: {e}")
+
 
 # ---- Retrain endpoint ----
 @app.post("/retrain")
@@ -910,6 +985,7 @@ async def retrain():
             status_code=500, detail=f"Failed to trigger retraining: {str(e)}"
         )
 
+
 # --- endpoint: raw log lines ---
 @app.get("/logs", response_class=PlainTextResponse)
 def get_logs(limit: int = 100, contains: Optional[str] = None):
@@ -928,9 +1004,11 @@ def get_logs(limit: int = 100, contains: Optional[str] = None):
 
     return "".join(lines)
 
+
 class FeedbackItem(BaseModel):
     features: dict  # same keys as feature_names
     target: float
+
 
 @app.post("/feedback")
 def feedback(item: FeedbackItem):
@@ -940,6 +1018,7 @@ def feedback(item: FeedbackItem):
     header = not os.path.exists(path)
     df.to_csv(path, mode="a", header=header, index=False)
     return {"status": "ok", "rows_appended": 1}
+
 
 # ======================================
 # Entrypoint
