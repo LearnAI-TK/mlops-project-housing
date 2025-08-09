@@ -19,9 +19,7 @@ RUN pip install --upgrade pip && pip install -r requirements.txt
 
 # ---------- app ----------
 # Copy only the code you need to run the API
-COPY src/ /app/src/
-COPY reports/ /app/reports/          # optional: if you serve EDA or log it
-COPY models/ /app/models/            # optional: local artifacts if you keep some
+RUN mkdir -p /app/models /app/reports
 
 # Set sensible defaults; can be overridden by docker-compose env
 ENV MLFLOW_TRACKING_URI=http://mlflow:5000 \
