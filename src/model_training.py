@@ -441,13 +441,13 @@ def main(
     version = None
     for attempt in range(10):
         logger.debug(
-            f"Attempt {attempt+1}/10 to find model version for run {best_run_id}"
+            f"Attempt {attempt + 1}/10 to find model version for run {best_run_id}"
         )
         version = _get_model_version_for_run(client, model_name, best_run_id)
         if version:
             logger.debug(f"Model version {version} found.")
             break
-        logger.warning(f"Waiting for model version... (attempt {attempt+1}/10)")
+        logger.warning(f"Waiting for model version... (attempt {attempt + 1}/10)")
         time.sleep(2)  # Consider if this wait is necessary or too long
     if not version:
         error_msg = "❌ No model version found for best run."
