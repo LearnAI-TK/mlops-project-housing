@@ -59,6 +59,7 @@ services:
       - ./logs:/app/logs
       - ./models:/app/models
       - ./mlflow:/mlflow
+      - ./src:/app/src:ro
     restart: on-failure
     healthcheck:
       test: [ "CMD-SHELL", "curl -fsS http://localhost:8000/health >/dev/null || exit 1" ]

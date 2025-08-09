@@ -1,40 +1,14 @@
-# ---------- base ----------
-FROM python:3.10-slim AS base
-
-ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1
-
-# System deps (curl for healthchecks/debug; build tools only if needed)
-RUN apt-get update -qq && apt-get install -y -qq --no-install-recommends \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
-
+# Dockerfile.api
+FROM python:3.10-slim
 WORKDIR /app
 
-# ---------- deps ----------
-# If you have a separate requirements file for API, keep the same name used here.
-COPY requirements.txt /app/requirements.txt
-RUN pip install --upgrade pip && pip install -r requirements.txt
+COPY requirements.txt .
+RUN pip install -U pip && pip install -r requirements.txt
 
-# ---------- app ----------
-# Copy only the code you need to run the API
-RUN mkdir -p /app/models /app/reports
+# copy code AFTER deps so you get layer caching
+COPY src/ /app/src/
 
-# Set sensible defaults; can be overridden by docker-compose env
-ENV MLFLOW_TRACKING_URI=http://mlflow:5000 \
-    MODEL_NAME=CaliforniaHousingRegressor \
-    MODEL_ALIAS=staging \
-    LOG_DIR=/app/logs \
-    MODEL_DIR=/app/models
+# ensure "src.api:app" is importable
+ENV PYTHONPATH=/app
 
-# Create log dir at runtime
-RUN mkdir -p /app/logs
-
-
-
-EXPOSE 8000
-
-# ---------- run ----------
-# Uvicorn runs the FastAPI app
-CMD ["uvicorn", "src.api:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn","src.api:app","--host","0.0.0.0","--port","8000","--proxy-headers","--forwarded-allow-ips","*"]
