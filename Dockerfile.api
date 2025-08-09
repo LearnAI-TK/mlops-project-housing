@@ -22,7 +22,6 @@ RUN pip install --upgrade pip && pip install -r requirements.txt
 COPY src/ /app/src/
 COPY reports/ /app/reports/          # optional: if you serve EDA or log it
 COPY models/ /app/models/            # optional: local artifacts if you keep some
-COPY data/ /app/data/                # optional: for /retrain reading local data
 
 # Set sensible defaults; can be overridden by docker-compose env
 ENV MLFLOW_TRACKING_URI=http://mlflow:5000 \
@@ -33,6 +32,8 @@ ENV MLFLOW_TRACKING_URI=http://mlflow:5000 \
 
 # Create log dir at runtime
 RUN mkdir -p /app/logs
+
+
 
 EXPOSE 8000
 

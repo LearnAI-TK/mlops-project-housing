@@ -28,6 +28,9 @@ RUN apt-get update && \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# app may expect the folder to exist
+RUN mkdir -p /app/data
+
 # Copy application source code
 # Copy the source code directory
 # Copy the rest of the application code
@@ -39,8 +42,8 @@ COPY . .
 # If they don't exist locally, the build might fail. Docker Compose volumes will handle runtime needs.
 # It's generally okay to copy them if they exist, but ensure they are in your project repo.
 COPY src/ ./src/
-COPY data/ ./data/
 COPY reports/ ./reports/
+COPY data/ ./data/
 # --- End copying other directories ---
 
 # If you have config files or other items in the project root, copy them too
