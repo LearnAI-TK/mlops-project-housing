@@ -133,6 +133,17 @@ jobs:
             # Show resolved images
             docker compose config | sed -n 's/^[[:space:]]*image:[[:space:]]*//p'
 
+            # Pre-clean if root FS has <3GB free
+            FREE_MB=$(df -Pm / | awk 'NR==2{print $4}')
+            if [ "$FREE_MB" -lt 3072 ]; then
+              echo "Low disk (${FREE_MB} MB). Pruning Docker..."
+              docker compose down || true
+              docker system prune -af --volumes || true
+              docker builder prune -af || true
+              sudo find /var/lib/docker/containers -name '*-json.log' -exec sudo truncate -s 0 {} \; || true
+            fi
+
+
             # Pull & restart
             docker compose pull
             docker compose up -d --remove-orphans
