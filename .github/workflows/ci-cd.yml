@@ -82,6 +82,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Verify files exist before SCP
+        run: |
+          set -e
+          ls -l ./docker-compose.yml ./deploy.sh
+          test -d ./monitoring
+
       - name: Upload compose + monitoring to EC2
         uses: appleboy/scp-action@v0.1.7
         with:
@@ -89,11 +95,12 @@ jobs:
           username: ubuntu
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           source: |
-            docker-compose.yml
-            deploy.sh
-            monitoring/**
+            ./docker-compose.yml
+            ./deploy.sh
+            ./monitoring/
           target: /home/ubuntu/mlops-app
           strip_components: 0
+          debug: true
 
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.0.3
