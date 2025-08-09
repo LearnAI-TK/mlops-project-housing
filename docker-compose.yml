@@ -62,7 +62,6 @@ services:
       - ./logs:/app/logs
       - ./models:/app/models
       - ./mlflow:/mlflow
-      - ./src:/app/src:ro
       - ./data:/app/data
     restart: on-failure
     healthcheck:
