@@ -49,7 +49,7 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      # Build + push TRAIN image
+      # Build + push TRAIN image (extra tags in same repo)
       - name: Build & push train image
         uses: docker/build-push-action@v5
         with:
@@ -57,12 +57,14 @@ jobs:
           file: ./Dockerfile.train
           push: true
           tags: |
-            ${{ secrets.DOCKERHUB_USERNAME }}/mlops-project-train:latest
-            ${{ secrets.DOCKERHUB_USERNAME }}/mlops-project-train:sha-${{ github.sha }}
-          cache-from: type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/mlops-project-train:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/mlops-ec2-train:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/mlops-ec2-train:sha-${{ github.sha }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/mlops-ec2-train:staging
+            ${{ secrets.DOCKERHUB_USERNAME }}/mlops-ec2-train:run-${{ github.run_number }}
+          cache-from: type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/mlops-ec2-train:latest
           cache-to: type=inline
 
-      # Build + push API image
+      # Build + push API image (extra tags in same repo)
       - name: Build & push api image
         uses: docker/build-push-action@v5
         with:
@@ -70,9 +72,11 @@ jobs:
           file: ./Dockerfile.api
           push: true
           tags: |
-            ${{ secrets.DOCKERHUB_USERNAME }}/mlops-project-api:latest
-            ${{ secrets.DOCKERHUB_USERNAME }}/mlops-project-api:sha-${{ github.sha }}
-          cache-from: type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/mlops-project-api:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/mlops-ec2-api:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/mlops-ec2-api:sha-${{ github.sha }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/mlops-ec2-api:staging
+            ${{ secrets.DOCKERHUB_USERNAME }}/mlops-ec2-api:run-${{ github.run_number }}
+          cache-from: type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/mlops-ec2-api:latest
           cache-to: type=inline
 
   deploy:
@@ -121,7 +125,7 @@ jobs:
 
             # Compose variables
             export DOCKERHUB_USERNAME='${{ secrets.DOCKERHUB_USERNAME }}'
-            export IMAGE_TAG='latest'
+            export IMAGE_TAG='latest'  # change to 'staging' or 'run-${{ github.run_number }}' if you want
 
             # Login to Docker Hub
             echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin

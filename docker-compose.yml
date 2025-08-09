@@ -6,15 +6,21 @@ services:
       - ./mlflow:/mlflow
     environment:
       MLFLOW_BACKEND_STORE_URI: sqlite:////mlflow/mlflow.db
-      MLFLOW_DEFAULT_ARTIFACT_ROOT: file:/mlflow/mlruns
+      # IMPORTANT: use file:/// (three slashes)
+      MLFLOW_DEFAULT_ARTIFACT_ROOT: file:///mlflow/mlruns
     command: >
-      bash -c " mkdir -p /mlflow/mlruns && touch /mlflow/mlflow.db && chmod a+rw /mlflow/mlflow.db &&
-               apt-get update -qq && apt-get install -y -qq curl >/dev/null &&
-               mlflow server --host 0.0.0.0 --port 5000
-               --backend-store-uri sqlite:////mlflow/mlflow.db
-               --default-artifact-root file:/mlflow/mlruns"
+      bash -lc "
+        mkdir -p /mlflow/mlruns &&
+        touch /mlflow/mlflow.db &&
+        chmod a+rw /mlflow/mlflow.db &&
+        apt-get update -qq &&
+        apt-get install -y -qq curl >/dev/null &&
+        mlflow server --host 0.0.0.0 --port 5000
+          --backend-store-uri sqlite:////mlflow/mlflow.db
+          --default-artifact-root file:///mlflow/mlruns
+      "
     healthcheck:
-      test: [ "CMD-SHELL", "curl -sSf http://localhost:5000 || exit 1" ]
+      test: [ "CMD-SHELL", "curl -sSf http://localhost:5000 >/dev/null || exit 1" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -22,25 +28,24 @@ services:
     restart: unless-stopped
 
   train:
-    image: $DOCKERHUB_USERNAME/mlops-project-train:latest
+    image: "${DOCKERHUB_USERNAME}/mlops-train:${IMAGE_TAG:-latest}"
     depends_on:
       mlflow:
         condition: service_healthy
     environment:
-      MLFLOW_TRACKING_URI: "http://mlflow:5000"
-      MODEL_NAME: "CaliforniaHousingRegressor"
-      MODEL_ALIAS: "staging"
-      PYTHONUNBUFFERED: "1"
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+      MODEL_NAME: CaliforniaHousingRegressor
+      MODEL_ALIAS: staging
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      AWS_DEFAULT_REGION: ap-south-1
     volumes:
-      - ./logs:/app/logs
-      - ./models:/app/models
       - ./mlflow:/mlflow
       - ./data:/app/data
-      - ./reports:/app/reports
-    restart: on-failure
+    command: bash -lc "dvc pull -q && python -u src/model_training.py"
 
   api:
-    image: "${DOCKERHUB_USERNAME:-yourdockeruser}/mlops-api:${IMAGE_TAG:-latest}"
+    image: "${DOCKERHUB_USERNAME}/mlops-api:${IMAGE_TAG:-latest}"
     depends_on:
       mlflow:
         condition: service_healthy
@@ -55,6 +60,11 @@ services:
       - ./models:/app/models
       - ./mlflow:/mlflow
     restart: on-failure
+    healthcheck:
+      test: [ "CMD-SHELL", "curl -fsS http://localhost:8000/health >/dev/null || exit 1" ]
+      interval: 10s
+      timeout: 3s
+      retries: 5
 
   prometheus:
     image: prom/prometheus:latest
