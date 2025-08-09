@@ -1,18 +1,8 @@
-# Use Python base image
 FROM python:3.10-slim
-
-# Set working directory
+RUN apt-get update -qq && apt-get install -y -qq --no-install-recommends git && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
-
-# Copy requirements and install
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Copy the rest of the project
+RUN pip install -U pip && pip install -r requirements.txt && pip install "dvc[s3]"  # or dvc[azure]/[gcs]/[ssh]
 COPY . .
-
-# Set environment variables
-ENV PYTHONUNBUFFERED=1
-
-# Default command for training
-CMD ["python", "src/model_training.py"]
+ENV GIT_PYTHON_REFRESH=quiet
+CMD ["bash","-lc","dvc pull -q && python -u src/model_training.py"]

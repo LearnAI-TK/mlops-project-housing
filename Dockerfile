@@ -41,9 +41,9 @@ COPY . .
 # These commands will copy directories if they exist in the build context (your local project folder).
 # If they don't exist locally, the build might fail. Docker Compose volumes will handle runtime needs.
 # It's generally okay to copy them if they exist, but ensure they are in your project repo.
-COPY src/ ./src/
-COPY reports/ ./reports/
-COPY data/ ./data/
+COPY src/ /app/src/
+COPY reports/ /app/reports/
+COPY data/ /app/data/
 # --- End copying other directories ---
 
 # If you have config files or other items in the project root, copy them too
@@ -60,3 +60,4 @@ HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
 
 # Run the FastAPI application by default
 CMD ["uvicorn", "src.api:app", "--host", "0.0.0.0", "--port", "8000"]
+
