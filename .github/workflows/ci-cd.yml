@@ -82,24 +82,25 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Verify files exist before SCP
+      - name: Verify files exist
         run: |
           set -e
           ls -l ./docker-compose.yml ./deploy.sh
           test -d ./monitoring
 
-      - name: Upload compose + monitoring to EC2
+      # Pack the deploy bundle explicitly (robust)
+      - name: Create deploy bundle
+        run: |
+          tar -czf deploy_bundle.tgz docker-compose.yml deploy.sh monitoring/
+
+      - name: Upload bundle to EC2
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ubuntu
           key: ${{ secrets.DEPLOY_SSH_KEY }}
-          source: |
-            ./docker-compose.yml
-            ./deploy.sh
-            ./monitoring/
+          source: ./deploy_bundle.tgz
           target: /home/ubuntu/mlops-app
-          strip_components: 0
           debug: true
 
       - name: Deploy via SSH
@@ -114,16 +115,24 @@ jobs:
             set -euo pipefail
             cd /home/ubuntu/mlops-app
 
-            # provide values for compose variable substitution
+            # Unpack bundle
+            tar -xzf deploy_bundle.tgz
+            rm -f deploy_bundle.tgz
+
+            # Compose variables
             export DOCKERHUB_USERNAME='${{ secrets.DOCKERHUB_USERNAME }}'
             export IMAGE_TAG='latest'
 
+            # Login to Docker Hub
             echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
 
-            # sanity: show resolved images
+            # Show resolved images
             docker compose config | sed -n 's/^[[:space:]]*image:[[:space:]]*//p'
 
+            # Pull & restart
             docker compose pull
             docker compose up -d --remove-orphans
+
+            # Cleanup and status
             docker image prune -f
             docker compose ps
