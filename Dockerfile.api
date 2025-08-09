@@ -1,0 +1,41 @@
+# ---------- base ----------
+FROM python:3.10-slim AS base
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
+
+# System deps (curl for healthchecks/debug; build tools only if needed)
+RUN apt-get update -qq && apt-get install -y -qq --no-install-recommends \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# ---------- deps ----------
+# If you have a separate requirements file for API, keep the same name used here.
+COPY requirements.txt /app/requirements.txt
+RUN pip install --upgrade pip && pip install -r requirements.txt
+
+# ---------- app ----------
+# Copy only the code you need to run the API
+COPY src/ /app/src/
+COPY reports/ /app/reports/          # optional: if you serve EDA or log it
+COPY models/ /app/models/            # optional: local artifacts if you keep some
+COPY data/ /app/data/                # optional: for /retrain reading local data
+
+# Set sensible defaults; can be overridden by docker-compose env
+ENV MLFLOW_TRACKING_URI=http://mlflow:5000 \
+    MODEL_NAME=CaliforniaHousingRegressor \
+    MODEL_ALIAS=staging \
+    LOG_DIR=/app/logs \
+    MODEL_DIR=/app/models
+
+# Create log dir at runtime
+RUN mkdir -p /app/logs
+
+EXPOSE 8000
+
+# ---------- run ----------
+# Uvicorn runs the FastAPI app
+CMD ["uvicorn", "src.api:app", "--host", "0.0.0.0", "--port", "8000"]
