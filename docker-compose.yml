@@ -28,7 +28,7 @@ services:
     restart: unless-stopped
 
   train:
-    image: "${DOCKERHUB_USERNAME}/mlops-train:${IMAGE_TAG:-latest}"
+    image: "${DOCKERHUB_USERNAME}/mlops-ec2-train:${IMAGE_TAG:-latest}"
     depends_on:
       mlflow:
         condition: service_healthy
@@ -45,7 +45,7 @@ services:
     command: bash -lc "dvc pull -q && python -u src/model_training.py"
 
   api:
-    image: "${DOCKERHUB_USERNAME}/mlops-api:${IMAGE_TAG:-latest}"
+    image: "${DOCKERHUB_USERNAME}/mlops-ec2-api:${IMAGE_TAG:-latest}"
     depends_on:
       mlflow:
         condition: service_healthy
