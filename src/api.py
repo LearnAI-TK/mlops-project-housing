@@ -6,48 +6,37 @@ FastAPI application for California Housing Price Prediction
 - SQLite logging, Prometheus metrics, retraining trigger, and system monitoring
 """
 
-from contextlib import asynccontextmanager
-from datetime import datetime
-from typing import Dict, Any, List, Optional
-from prometheus_client import Summary, Histogram
 import json
 import logging
 import os
+import re
 import sqlite3
 import time
 import uuid
-import re
-from fastapi.responses import PlainTextResponse
 from collections import deque
-from pydantic import BaseModel
+from contextlib import asynccontextmanager
+from datetime import datetime
+from typing import Any, Dict, List, Optional
 
 import joblib
-import mlflow
 import pandas as pd
 import psutil
+import mlflow
 import uvicorn
-from fastapi import FastAPI, HTTPException, Response, Request
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi.responses import JSONResponse, PlainTextResponse
 from mlflow.tracking import MlflowClient
-from pydantic import BaseModel, Field, validator
 
 # Prometheus Client
 from prometheus_client import (
-    Summary,
-    Counter,
-    Histogram,
-    Gauge,
-    generate_latest,
     CONTENT_TYPE_LATEST,
+    Counter,
+    Gauge,
+    Histogram,
+    Summary,
+    generate_latest,
 )
-
-# Optional GPU metrics
-try:
-    import GPUtil
-    GPU_AVAILABLE = True
-except ImportError:
-    GPU_AVAILABLE = False
-
+from pydantic import BaseModel, Field, validator
 # ======================================
 # Config (env-driven)
 # ======================================
@@ -120,17 +109,27 @@ logger = logging.getLogger(__name__)
 try:
     from sklearn.linear_model import LinearRegression
     from sklearn.tree import DecisionTreeRegressor
+
     from src.model_training import train_and_log_model  # , validate_data
+
     TRAINING_MODULE_AVAILABLE = True
 except Exception as e:
     logger.error(f"Failed to import training module functions: {e}")
     TRAINING_MODULE_AVAILABLE = False
 
 # Default data paths
-DEFAULT_TRAIN_FEATURES_PATH = os.getenv("TRAIN_FEATURES_PATH", "data/processed/train_features.csv")
-DEFAULT_TRAIN_TARGET_PATH = os.getenv("TRAIN_TARGET_PATH", "data/processed/train_target.csv")
-DEFAULT_TEST_FEATURES_PATH = os.getenv("TEST_FEATURES_PATH", "data/processed/test_features.csv")
-DEFAULT_TEST_TARGET_PATH = os.getenv("TEST_TARGET_PATH", "data/processed/test_target.csv")
+DEFAULT_TRAIN_FEATURES_PATH = os.getenv(
+    "TRAIN_FEATURES_PATH", "data/processed/train_features.csv"
+)
+DEFAULT_TRAIN_TARGET_PATH = os.getenv(
+    "TRAIN_TARGET_PATH", "data/processed/train_target.csv"
+)
+DEFAULT_TEST_FEATURES_PATH = os.getenv(
+    "TEST_FEATURES_PATH", "data/processed/test_features.csv"
+)
+DEFAULT_TEST_TARGET_PATH = os.getenv(
+    "TEST_TARGET_PATH", "data/processed/test_target.csv"
+)
 
 # Resolve relative paths to working dir
 if not os.path.isabs(DEFAULT_TRAIN_FEATURES_PATH):
@@ -149,6 +148,7 @@ feature_transformer = None
 feature_names = None
 target_transformer = None
 model_version_str = "unknown"
+
 
 # ======================================
 # SQLite init
@@ -184,6 +184,7 @@ def init_db():
         logger.error(f"Failed to initialize SQLite database: {e}")
         raise
 
+
 # ======================================
 # Metrics helpers
 # ======================================
@@ -194,7 +195,11 @@ def get_system_metrics():
         metrics["cpu_percent"] = psutil.cpu_percent(interval=0.1)
         try:
             load_avg = psutil.getloadavg()
-            metrics["cpu_load_1min"], metrics["cpu_load_5min"], metrics["cpu_load_15min"] = load_avg
+            (
+                metrics["cpu_load_1min"],
+                metrics["cpu_load_5min"],
+                metrics["cpu_load_15min"],
+            ) = load_avg
         except AttributeError:
             pass
         mem = psutil.virtual_memory()
@@ -216,6 +221,7 @@ def get_system_metrics():
         metrics["system_metrics_error"] = str(e)
     return metrics
 
+
 def get_gpu_metrics():
     """Get GPU metrics via GPUtil."""
     gpu_metrics = {}
@@ -234,9 +240,11 @@ def get_gpu_metrics():
                     "load_percent": round(gpu.load * 100, 2),
                     "memory_used_mb": gpu.memoryUsed,
                     "memory_total_mb": gpu.memoryTotal,
-                    "memory_percent": round((gpu.memoryUsed / gpu.memoryTotal) * 100, 2)
-                    if gpu.memoryTotal > 0
-                    else 0,
+                    "memory_percent": (
+                        round((gpu.memoryUsed / gpu.memoryTotal) * 100, 2)
+                        if gpu.memoryTotal > 0
+                        else 0
+                    ),
                     "temperature_celsius": gpu.temperature,
                 }
             )
@@ -244,6 +252,7 @@ def get_gpu_metrics():
         logger.error(f"Error collecting GPU metrics: {e}")
         gpu_metrics["gpu_metrics_error"] = str(e)
     return gpu_metrics
+
 
 def get_prediction_metrics():
     """Aggregate prediction metrics from DB."""
@@ -268,6 +277,7 @@ def get_prediction_metrics():
         logger.error(f"Error fetching prediction metrics: {e}")
         pred_metrics["prediction_metrics_error"] = str(e)
     return pred_metrics
+
 
 def get_recent_predictions(limit: int = 50) -> List[Dict[str, Any]]:
     """Return recent prediction rows from DB."""
@@ -303,6 +313,7 @@ def get_recent_predictions(limit: int = 50) -> List[Dict[str, Any]]:
         logger.error(f"Error fetching recent predictions: {e}")
     return out
 
+
 def get_all_metrics():
     m = {}
     m.update(get_prediction_metrics())
@@ -310,6 +321,7 @@ def get_all_metrics():
     m.update(get_gpu_metrics())
     m["recent_predictions"] = get_recent_predictions(limit=10)
     return m
+
 
 def update_prometheus_system_metrics():
     try:
@@ -325,6 +337,7 @@ def update_prometheus_system_metrics():
     except Exception as e:
         logger.error(f"Error updating Prometheus system metrics: {e}")
 
+
 def update_prometheus_gpu_metrics():
     if not GPU_AVAILABLE:
         return
@@ -332,11 +345,16 @@ def update_prometheus_gpu_metrics():
         for gpu in GPUtil.getGPUs():
             gid = str(gpu.id)
             GPU_LOAD_PERCENT.labels(gpu_id=gid).set(round(gpu.load * 100, 2))
-            mem_pct = round((gpu.memoryUsed / gpu.memoryTotal) * 100, 2) if gpu.memoryTotal else 0
+            mem_pct = (
+                round((gpu.memoryUsed / gpu.memoryTotal) * 100, 2)
+                if gpu.memoryTotal
+                else 0
+            )
             GPU_MEMORY_PERCENT.labels(gpu_id=gid).set(mem_pct)
             GPU_TEMPERATURE.labels(gpu_id=gid).set(gpu.temperature)
     except Exception as e:
         logger.error(f"Error updating Prometheus GPU metrics: {e}")
+
 
 # --- helper: efficient tail of a file ---
 def _tail_lines(path: str, max_lines: int):
@@ -346,8 +364,11 @@ def _tail_lines(path: str, max_lines: int):
     except FileNotFoundError:
         return None
 
+
 # --- helper: best-effort JSON extraction from a log line ---
 _json_obj_re = re.compile(r"\{.*\}")
+
+
 def _extract_json(line: str):
     try:
         # support lines like: 'PRED|{"a":1,"b":2}' or pure JSON lines
@@ -357,6 +378,7 @@ def _extract_json(line: str):
         return json.loads(m.group(0))
     except Exception:
         return None
+
 
 # ======================================
 # Lifespan (init model + artifacts)
@@ -398,9 +420,13 @@ async def lifespan(app: FastAPI):
         # Download preprocessing artifacts
         local_artifact_dir = os.path.join(MODEL_DIR, "preprocessing")
         artifact_path = "preprocessing"
-        logger.info(f"📥 Downloading artifacts from run {run_id}, path='{artifact_path}'")
+        logger.info(
+            f"📥 Downloading artifacts from run {run_id}, path='{artifact_path}'"
+        )
         try:
-            client.download_artifacts(run_id, artifact_path, dst_path=local_artifact_dir)
+            client.download_artifacts(
+                run_id, artifact_path, dst_path=local_artifact_dir
+            )
             logger.info(f"✅ Artifacts downloaded to {local_artifact_dir}")
         except Exception as e:
             logger.error(f"Failed to download '{artifact_path}': {e}")
@@ -417,10 +443,18 @@ async def lifespan(app: FastAPI):
             return joblib.load(path)
 
         scaler = load_joblib_safe("scaler.pkl", "Scaler")
-        feature_transformer = load_joblib_safe("power_transformer.pkl", "Power Transformer")
+        feature_transformer = load_joblib_safe(
+            "power_transformer.pkl", "Power Transformer"
+        )
         feature_names = load_joblib_safe("feature_names.pkl", "Feature Names")
-        target_transformer_path = os.path.join(local_artifact_dir, "target_transformer.pkl")
-        target_transformer = joblib.load(target_transformer_path) if os.path.exists(target_transformer_path) else None
+        target_transformer_path = os.path.join(
+            local_artifact_dir, "target_transformer.pkl"
+        )
+        target_transformer = (
+            joblib.load(target_transformer_path)
+            if os.path.exists(target_transformer_path)
+            else None
+        )
         logger.info("✅ Preprocessing components loaded.")
 
         # Load model via alias
@@ -435,12 +469,16 @@ async def lifespan(app: FastAPI):
     yield
     logger.info("🛑 API shutting down.")
 
+
 # ======================================
 # FastAPI app
 # ======================================
 app = FastAPI(
     title="California Housing Price Predictor API",
-    description="Predict housing prices with a full preprocessing pipeline. Uses MLflow @alias. Logging, metrics, retraining.",
+    description=(
+        "Predict housing prices with a full preprocessing pipeline. "
+        "Uses MLflow @alias. Logging, metrics, retraining."
+    ),
     version="1.0.0",
     lifespan=lifespan,
 )
@@ -474,24 +512,40 @@ async def log_requests_middleware(request: Request, call_next):
             method=request.method, endpoint=request.url.path
         ).observe(dur)
 
+
 # ======================================
 # Schemas
 # ======================================
 class PredictionRequest(BaseModel):
-    MedInc: float = Field(..., description="Median income in block group", example=3.87, gt=0)
-    HouseAge: float = Field(..., description="Median house age in block group", example=25.0, ge=0)
-    AveRooms: float = Field(..., description="Average rooms per household", example=5.0, gt=0)
-    AveBedrms: float = Field(..., description="Average bedrooms per household", example=1.0, gt=0)
-    Population: float = Field(..., description="Block group population", example=1200.0, ge=0)
-    AveOccup: float = Field(..., description="Average household members", example=2.5, gt=0)
+    MedInc: float = Field(
+        ..., description="Median income in block group", example=3.87, gt=0
+    )
+    HouseAge: float = Field(
+        ..., description="Median house age in block group", example=25.0, ge=0
+    )
+    AveRooms: float = Field(
+        ..., description="Average rooms per household", example=5.0, gt=0
+    )
+    AveBedrms: float = Field(
+        ..., description="Average bedrooms per household", example=1.0, gt=0
+    )
+    Population: float = Field(
+        ..., description="Block group population", example=1200.0, ge=0
+    )
+    AveOccup: float = Field(
+        ..., description="Average household members", example=2.5, gt=0
+    )
     Latitude: float = Field(..., description="Latitude", example=34.0, ge=32, le=42)
-    Longitude: float = Field(..., description="Longitude", example=-118.0, ge=-124, le=-114)
+    Longitude: float = Field(
+        ..., description="Longitude", example=-118.0, ge=-124, le=-114
+    )
 
     @validator("AveBedrms")
     def bedrooms_less_than_rooms(cls, v, values, **kwargs):
         if "AveRooms" in values and v >= values["AveRooms"]:
             raise ValueError("AveBedrms must be less than AveRooms")
         return v
+
 
 class PredictionResponse(BaseModel):
     predicted_price: float
@@ -500,12 +554,15 @@ class PredictionResponse(BaseModel):
     model_version: str
     status: str = "success"
 
+
 class RecentPredictionsResponse(BaseModel):
     predictions: List[Dict[str, Any]]
+
 
 # ---- helper: robust CSV reader (handles UTF-16/Windows encodings) ----
 def read_csv_smart(path, **kwargs):
     import pandas as pd
+
     encodings = ["utf-8", "utf-8-sig", "utf-16", "utf-16le", "cp1252", "latin1"]
     last_err = None
     for enc in encodings:
@@ -513,14 +570,22 @@ def read_csv_smart(path, **kwargs):
             return pd.read_csv(path, encoding=enc, **kwargs)
         except Exception as e:
             last_err = e
-    raise ValueError(f"Failed to read CSV '{path}' using encodings {encodings}. Last error: {last_err}")
+    raise ValueError(
+        f"Failed to read CSV '{path}' using encodings {encodings}. Last error: {last_err}"
+    )
+
 
 # ======================================
 # Endpoints
 # ======================================
 @app.get("/")
 async def read_root():
-    return {"message": "Welcome to the California Housing Price Prediction API", "docs": "/docs", "health": "/health"}
+    return {
+        "message": "Welcome to the California Housing Price Prediction API",
+        "docs": "/docs",
+        "health": "/health",
+    }
+
 
 @app.get("/health")
 async def health_check():
@@ -544,12 +609,17 @@ async def health_check():
     }
     return JSONResponse(content=health_status, status_code=200 if status_ok else 503)
 
+
 @app.get("/model/info")
 async def model_info():
     if ml_model is None:
         raise HTTPException(
             status_code=503,
-            detail={"error": "Model not loaded", "status": "loading", "health_check": "/health"},
+            detail={
+                "error": "Model not loaded",
+                "status": "loading",
+                "health_check": "/health",
+            },
         )
     try:
         model_details = {
@@ -569,7 +639,14 @@ async def model_info():
         return model_details
     except Exception as e:
         logger.error(f"Error fetching model info: {e}")
-        raise HTTPException(status_code=500, detail={"error": "Could not retrieve model information", "exception": str(e)})
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "Could not retrieve model information",
+                "exception": str(e),
+            },
+        )
+
 
 @app.post("/predict", response_model=PredictionResponse)
 async def predict(request: Request, prediction_request: PredictionRequest):
@@ -589,8 +666,10 @@ async def predict(request: Request, prediction_request: PredictionRequest):
             missing = set(feature_names) - set(input_df.columns)
             extra = set(input_df.columns) - set(feature_names)
             msg = []
-            if missing: msg.append(f"Missing: {sorted(list(missing))}")
-            if extra: msg.append(f"Extra: {sorted(list(extra))}")
+            if missing:
+                msg.append(f"Missing: {sorted(list(missing))}")
+            if extra:
+                msg.append(f"Extra: {sorted(list(extra))}")
             raise ValueError("Input features do not match training. " + " ".join(msg))
 
         input_df = input_df[feature_names]
@@ -600,7 +679,9 @@ async def predict(request: Request, prediction_request: PredictionRequest):
 
         prediction_final = prediction_raw
         if target_transformer is not None:
-            prediction_final = float(target_transformer.inverse_transform([[prediction_raw]])[0][0])
+            prediction_final = float(
+                target_transformer.inverse_transform([[prediction_raw]])[0][0]
+            )
 
         processing_time = time.time() - start_time
 
@@ -651,7 +732,8 @@ async def predict(request: Request, prediction_request: PredictionRequest):
         update_prometheus_gpu_metrics()
 
         return PredictionResponse(
-            predicted_price=prediction_final * 100_000,  # keep if your target is in 100k units
+            predicted_price=prediction_final
+            * 100_000,  # keep if your target is in 100k units
             predicted_price_raw=prediction_final,
             timestamp=datetime.now().isoformat(),
             model_version=model_version_str,
@@ -660,14 +742,17 @@ async def predict(request: Request, prediction_request: PredictionRequest):
         logger.exception("Prediction failed")
         raise HTTPException(status_code=500, detail=f"Prediction error: {str(e)}")
 
+
 # ---- Metrics endpoints ----
 @app.get("/metrics")  # Prometheus default scrape path
 async def prometheus_metrics():
     return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
+
 @app.get("/metrics/json")  # Human-friendly, rich JSON metrics
 async def metrics_json():
     return JSONResponse(content=get_all_metrics())
+
 
 # ---- Recent predictions ----
 @app.get("/predictions/recent", response_model=RecentPredictionsResponse)
@@ -675,18 +760,6 @@ async def get_recent_predictions_endpoint(limit: int = 50):
     limit = min(limit, 1000)
     return {"predictions": get_recent_predictions(limit=limit)}
 
-# ---- Retraining ----
-# ---- helper: robust CSV reader (handles UTF-16/Windows encodings) ----
-def read_csv_smart(path, **kwargs):
-    import pandas as pd
-    encodings = ["utf-8", "utf-8-sig", "utf-16", "utf-16le", "cp1252", "latin1"]
-    last_err = None
-    for enc in encodings:
-        try:
-            return pd.read_csv(path, encoding=enc, **kwargs)
-        except Exception as e:
-            last_err = e
-    raise ValueError(f"Failed to read CSV '{path}' using encodings {encodings}. Last error: {last_err}")
 
 # ---- corrected /retrain ----
 @app.post("/retrain")
@@ -713,12 +786,16 @@ async def retrain():
             try:
                 new_df = read_csv_smart(new_path)
                 if "target" not in new_df.columns:
-                    logger.warning(f"'target' column missing in {new_path}; skipping new data.")
+                    logger.warning(
+                        f"'target' column missing in {new_path}; skipping new data."
+                    )
                 else:
                     # Check required feature columns
                     missing = set(base_X.columns) - set(new_df.columns)
                     if missing:
-                        raise ValueError(f"New data missing feature columns: {sorted(list(missing))}")
+                        raise ValueError(
+                            f"New data missing feature columns: {sorted(list(missing))}"
+                        )
 
                     # Keep only known features + target; drop rows with NA in any feature/target
                     use_cols = list(base_X.columns) + ["target"]
@@ -747,7 +824,10 @@ async def retrain():
                         new_rows = int(len(extra_X))
 
             except Exception as e:
-                logger.error(f"Failed to incorporate new labeled data from {new_path}: {e}", exc_info=True)
+                logger.error(
+                    f"Failed to incorporate new labeled data from {new_path}: {e}",
+                    exc_info=True,
+                )
 
         # Optional: shuffle
         if len(X_train) > 1:
@@ -755,7 +835,9 @@ async def retrain():
             X_train = X_train.loc[idx].reset_index(drop=True)
             y_train = y_train.loc[idx].reset_index(drop=True)
 
-        logger.info(f"Training size: {len(X_train)} (base {len(base_X)} + new {new_rows})")
+        logger.info(
+            f"Training size: {len(X_train)} (base {len(base_X)} + new {new_rows})"
+        )
 
         # 3) Train candidates
         logger.info("Training Linear Regression (Retrain)...")
@@ -766,23 +848,43 @@ async def retrain():
         logger.info("Training Decision Tree (Retrain)...")
         dt_params = {"max_depth": 10, "random_state": 42}
         dt_run_id, dt_rmse, dt_r2 = train_and_log_model(
-            "DecisionTreeRegressor", DecisionTreeRegressor, dt_params, X_train, y_train, X_test, y_test
+            "DecisionTreeRegressor",
+            DecisionTreeRegressor,
+            dt_params,
+            X_train,
+            y_train,
+            X_test,
+            y_test,
         )
 
         # 4) Pick winner by RMSE
         if lr_rmse <= dt_rmse:
-            best_run_id, best_model_name, best_rmse, best_r2 = lr_run_id, "LinearRegression", lr_rmse, lr_r2
+            best_run_id, best_model_name, best_rmse, best_r2 = (
+                lr_run_id,
+                "LinearRegression",
+                lr_rmse,
+                lr_r2,
+            )
         else:
-            best_run_id, best_model_name, best_rmse, best_r2 = dt_run_id, "DecisionTreeRegressor", dt_rmse, dt_r2
+            best_run_id, best_model_name, best_rmse, best_r2 = (
+                dt_run_id,
+                "DecisionTreeRegressor",
+                dt_rmse,
+                dt_r2,
+            )
 
-        logger.info(f"🏆 Winner: {best_model_name} (run {best_run_id}) | RMSE={best_rmse:.4f}, R²={best_r2:.4f}")
+        logger.info(
+            f"🏆 Winner: {best_model_name} (run {best_run_id}) | RMSE={best_rmse:.4f}, R²={best_r2:.4f}"
+        )
 
         # 5) Promote winner to alias 'staging'
         client = MlflowClient()
         version = None
         for _ in range(10):
             try:
-                mvs = client.search_model_versions(f"run_id='{best_run_id}' and name='{MODEL_NAME}'")
+                mvs = client.search_model_versions(
+                    f"run_id='{best_run_id}' and name='{MODEL_NAME}'"
+                )
                 if mvs:
                     version = str(mvs[0].version)
                     break
@@ -818,7 +920,9 @@ async def retrain():
 
     except Exception as e:
         logger.error(f"Retraining failed: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to trigger retraining: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to trigger retraining: {str(e)}"
+        )
 
 
 # --- endpoint: raw log lines ---
@@ -839,9 +943,11 @@ def get_logs(limit: int = 100, contains: Optional[str] = None):
 
     return "".join(lines)
 
+
 class FeedbackItem(BaseModel):
-    features: dict   # same keys as feature_names
+    features: dict  # same keys as feature_names
     target: float
+
 
 @app.post("/feedback")
 def feedback(item: FeedbackItem):
@@ -852,6 +958,7 @@ def feedback(item: FeedbackItem):
     header = not os.path.exists(path)
     df.to_csv(path, mode="a", header=header, index=False)
     return {"status": "ok", "rows_appended": 1}
+
 
 # ======================================
 # Entrypoint

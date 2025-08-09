@@ -1,0 +1,6 @@
+[flake8]
+max-line-length = 120
+extend-ignore = E203, W503
+# keep these errors ON so we actually fix them:
+# F401,F811,F541,E111,E117,E402,E701
+exclude = .git,__pycache__,.venv,venv,mlruns,mlflow,monitoring/grafana,monitoring/prometheus,build,dist

@@ -8,14 +8,15 @@ Preprocessing for California Housing dataset:
 - Save processed CSVs and preprocessing artifacts
 """
 
-import os
 import logging
+import os
+
 import joblib
-import yaml
 import pandas as pd
+import yaml
 from sklearn.datasets import fetch_california_housing
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler, PowerTransformer
+from sklearn.preprocessing import PowerTransformer, StandardScaler
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -24,11 +25,13 @@ RAW_CSV = "data/raw/california_housing.csv"
 PROC_DIR = "data/processed"
 ART_DIR = "models/preprocessing"
 
+
 def load_params(path="params.yaml"):
     if os.path.exists(path):
         with open(path, "r") as f:
             return yaml.safe_load(f)
     return {"test_size": 0.2, "random_state": 42, "transform_target": True}
+
 
 def fetch_raw(raw_csv=RAW_CSV):
     """Download dataset and write RAW_CSV if missing."""
@@ -43,10 +46,12 @@ def fetch_raw(raw_csv=RAW_CSV):
     df.to_csv(raw_csv, index=False)
     logger.info(f"💾 Raw saved: {raw_csv}")
 
+
 def validate_data(X, y, name):
     assert not X.isnull().values.any(), f"NaN in {name} X"
     assert not y.isnull().values.any(), f"NaN in {name} y"
     assert len(X) == len(y), f"len mismatch in {name}"
+
 
 def preprocess(
     raw_csv=RAW_CSV,
@@ -74,24 +79,36 @@ def preprocess(
     logger.info("🔧 PowerTransformer(Yeo-Johnson) on features")
     feat_pt = PowerTransformer(method="yeo-johnson")
     X_train_tf = pd.DataFrame(feat_pt.fit_transform(X_train), columns=X.columns)
-    X_test_tf  = pd.DataFrame(feat_pt.transform(X_test), columns=X.columns)
+    X_test_tf = pd.DataFrame(feat_pt.transform(X_test), columns=X.columns)
 
     # Scale
     logger.info("📐 StandardScaler on features")
     scaler = StandardScaler()
     X_train_sc = pd.DataFrame(scaler.fit_transform(X_train_tf), columns=X.columns)
-    X_test_sc  = pd.DataFrame(scaler.transform(X_test_tf), columns=X.columns)
+    X_test_sc = pd.DataFrame(scaler.transform(X_test_tf), columns=X.columns)
 
     # Optional: transform target
     tgt_pt = None
     if transform_target:
         logger.info("🎯 PowerTransformer on target")
         tgt_pt = PowerTransformer(method="yeo-johnson", standardize=True)
-        y_train_out = pd.DataFrame({"target_transformed": tgt_pt.fit_transform(y_train.values.reshape(-1,1)).squeeze()})
-        y_test_out  = pd.DataFrame({"target_transformed": tgt_pt.transform(y_test.values.reshape(-1,1)).squeeze()})
+        y_train_out = pd.DataFrame(
+            {
+                "target_transformed": tgt_pt.fit_transform(
+                    y_train.values.reshape(-1, 1)
+                ).squeeze()
+            }
+        )
+        y_test_out = pd.DataFrame(
+            {
+                "target_transformed": tgt_pt.transform(
+                    y_test.values.reshape(-1, 1)
+                ).squeeze()
+            }
+        )
     else:
         y_train_out = pd.DataFrame({"target": y_train})
-        y_test_out  = pd.DataFrame({"target": y_test})
+        y_test_out = pd.DataFrame({"target": y_test})
 
     # Save processed
     X_train_sc.to_csv(f"{processed_dir}/train_features.csv", index=False)
@@ -108,6 +125,7 @@ def preprocess(
         joblib.dump(tgt_pt, f"{art_dir}/target_transformer.pkl")
     logger.info(f"📦 Artifacts saved → {art_dir}")
 
+
 def main():
     p = load_params()
     fetch_raw(RAW_CSV)  # no-op if already present
@@ -120,6 +138,7 @@ def main():
         transform_target=p.get("transform_target", True),
     )
     logger.info("🎉 Preprocessing done")
+
 
 if __name__ == "__main__":
     main()
