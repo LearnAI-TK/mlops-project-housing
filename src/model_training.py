@@ -312,9 +312,7 @@ def train_and_log_model(
                 input_example=input_example,
             )
             mlflow.set_tag("run_status", "success")
-            logger.info(
-                f" Logged {model_name} with MLflow. Run ID: {run.info.run_id}"
-            )
+            logger.info(f" Logged {model_name} with MLflow. Run ID: {run.info.run_id}")
             logger.info(f"📈 Metrics - RMSE: {rmse:.4f}, R²: {r2:.4f}")
             logger.info(
                 "View in UI: "

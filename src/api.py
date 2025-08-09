@@ -21,22 +21,17 @@ from typing import Any, Dict, List, Optional
 import joblib
 import pandas as pd
 import psutil
-import mlflow
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import JSONResponse, PlainTextResponse
 from mlflow.tracking import MlflowClient
-
 # Prometheus Client
-from prometheus_client import (
-    CONTENT_TYPE_LATEST,
-    Counter,
-    Gauge,
-    Histogram,
-    Summary,
-    generate_latest,
-)
+from prometheus_client import (CONTENT_TYPE_LATEST, Counter, Gauge, Histogram,
+                               Summary, generate_latest)
 from pydantic import BaseModel, Field, validator
+
+import mlflow
+
 # ======================================
 # Config (env-driven)
 # ======================================
@@ -86,11 +81,6 @@ CPU_PERCENT = Gauge("cpu_percent", "CPU usage percentage")
 MEMORY_PERCENT = Gauge("memory_percent", "Memory usage percentage")
 DISK_PERCENT = Gauge("disk_percent", "Disk usage percentage")
 
-# GPU gauges (if available)
-if GPU_AVAILABLE:
-    GPU_LOAD_PERCENT = Gauge("gpu_load_percent", "GPU load %", ["gpu_id"])
-    GPU_MEMORY_PERCENT = Gauge("gpu_memory_percent", "GPU memory %", ["gpu_id"])
-    GPU_TEMPERATURE = Gauge("gpu_temperature_celsius", "GPU temp C", ["gpu_id"])
 
 # ======================================
 # Logging
@@ -222,38 +212,6 @@ def get_system_metrics():
     return metrics
 
 
-def get_gpu_metrics():
-    """Get GPU metrics via GPUtil."""
-    gpu_metrics = {}
-    if not GPU_AVAILABLE:
-        gpu_metrics["gpu_available"] = False
-        return gpu_metrics
-    try:
-        gpus = GPUtil.getGPUs()
-        gpu_metrics["gpu_available"] = True
-        gpu_metrics["gpus"] = []
-        for gpu in gpus:
-            gpu_metrics["gpus"].append(
-                {
-                    "id": gpu.id,
-                    "name": gpu.name,
-                    "load_percent": round(gpu.load * 100, 2),
-                    "memory_used_mb": gpu.memoryUsed,
-                    "memory_total_mb": gpu.memoryTotal,
-                    "memory_percent": (
-                        round((gpu.memoryUsed / gpu.memoryTotal) * 100, 2)
-                        if gpu.memoryTotal > 0
-                        else 0
-                    ),
-                    "temperature_celsius": gpu.temperature,
-                }
-            )
-    except Exception as e:
-        logger.error(f"Error collecting GPU metrics: {e}")
-        gpu_metrics["gpu_metrics_error"] = str(e)
-    return gpu_metrics
-
-
 def get_prediction_metrics():
     """Aggregate prediction metrics from DB."""
     pred_metrics = {}
@@ -318,7 +276,6 @@ def get_all_metrics():
     m = {}
     m.update(get_prediction_metrics())
     m.update(get_system_metrics())
-    m.update(get_gpu_metrics())
     m["recent_predictions"] = get_recent_predictions(limit=10)
     return m
 
@@ -336,24 +293,6 @@ def update_prometheus_system_metrics():
         DISK_PERCENT.set(disk.percent)
     except Exception as e:
         logger.error(f"Error updating Prometheus system metrics: {e}")
-
-
-def update_prometheus_gpu_metrics():
-    if not GPU_AVAILABLE:
-        return
-    try:
-        for gpu in GPUtil.getGPUs():
-            gid = str(gpu.id)
-            GPU_LOAD_PERCENT.labels(gpu_id=gid).set(round(gpu.load * 100, 2))
-            mem_pct = (
-                round((gpu.memoryUsed / gpu.memoryTotal) * 100, 2)
-                if gpu.memoryTotal
-                else 0
-            )
-            GPU_MEMORY_PERCENT.labels(gpu_id=gid).set(mem_pct)
-            GPU_TEMPERATURE.labels(gpu_id=gid).set(gpu.temperature)
-    except Exception as e:
-        logger.error(f"Error updating Prometheus GPU metrics: {e}")
 
 
 # --- helper: efficient tail of a file ---
@@ -385,14 +324,9 @@ def _extract_json(line: str):
 # ======================================
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global ml_model, scaler, feature_transformer, feature_names, target_transformer, model_version_str, GPU_AVAILABLE
+    global ml_model, scaler, feature_transformer, feature_names, target_transformer, model_version_str
     try:
         init_db()
-
-        if not GPU_AVAILABLE:
-            logger.info("GPUtil not found. GPU metrics will not be available.")
-        else:
-            logger.info("GPUtil found. GPU metrics will be available.")
 
         mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
         client = MlflowClient()
@@ -482,6 +416,7 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
+
 
 # ======================================
 # Middleware (logs + Prometheus)
@@ -729,7 +664,6 @@ async def predict(request: Request, prediction_request: PredictionRequest):
         PREDICTION_DURATION.observe(processing_time)
         PREDICTION_COUNT.labels(model_version=model_version_str).inc()
         update_prometheus_system_metrics()
-        update_prometheus_gpu_metrics()
 
         return PredictionResponse(
             predicted_price=prediction_final
