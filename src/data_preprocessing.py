@@ -5,8 +5,7 @@ Preprocessing for California Housing dataset:
 - Train/test split
 - Power transform (features [+ optional target])
 - Standard scale
-- Save processed CSVs and preprocessing artifacts
-"""
+- Save processed CSVs and preprocessing artifacts"""
 
 import logging
 import os
@@ -44,7 +43,7 @@ def fetch_raw(raw_csv=RAW_CSV):
     X, y = housing.data, housing.target.rename("target")
     df = pd.concat([X, y], axis=1)
     df.to_csv(raw_csv, index=False)
-    logger.info(f"💾 Raw saved: {raw_csv}")
+    logger.info(f"Raw saved: {raw_csv}")
 
 
 def validate_data(X, y, name):
@@ -61,7 +60,7 @@ def preprocess(
     random_state=42,
     transform_target=True,
 ):
-    logger.info("🚀 Preprocessing start")
+    logger.info("Preprocessing start")
     os.makedirs(processed_dir, exist_ok=True)
     os.makedirs(art_dir, exist_ok=True)
 
@@ -76,13 +75,13 @@ def preprocess(
     validate_data(X_test, y_test, "test raw")
 
     # Power transform features
-    logger.info("🔧 PowerTransformer(Yeo-Johnson) on features")
+    logger.info("PowerTransformer(Yeo-Johnson) on features")
     feat_pt = PowerTransformer(method="yeo-johnson")
     X_train_tf = pd.DataFrame(feat_pt.fit_transform(X_train), columns=X.columns)
     X_test_tf = pd.DataFrame(feat_pt.transform(X_test), columns=X.columns)
 
     # Scale
-    logger.info("📐 StandardScaler on features")
+    logger.info("StandardScaler on features")
     scaler = StandardScaler()
     X_train_sc = pd.DataFrame(scaler.fit_transform(X_train_tf), columns=X.columns)
     X_test_sc = pd.DataFrame(scaler.transform(X_test_tf), columns=X.columns)
@@ -90,7 +89,7 @@ def preprocess(
     # Optional: transform target
     tgt_pt = None
     if transform_target:
-        logger.info("🎯 PowerTransformer on target")
+        logger.info("PowerTransformer on target")
         tgt_pt = PowerTransformer(method="yeo-johnson", standardize=True)
         y_train_out = pd.DataFrame(
             {
@@ -115,7 +114,7 @@ def preprocess(
     X_test_sc.to_csv(f"{processed_dir}/test_features.csv", index=False)
     y_train_out.to_csv(f"{processed_dir}/train_target.csv", index=False)
     y_test_out.to_csv(f"{processed_dir}/test_target.csv", index=False)
-    logger.info(f"✅ Processed saved → {processed_dir}")
+    logger.info(f"Processed saved → {processed_dir}")
 
     # Save artifacts
     joblib.dump(scaler, f"{art_dir}/scaler.pkl")
@@ -123,7 +122,7 @@ def preprocess(
     joblib.dump(X.columns.tolist(), f"{art_dir}/feature_names.pkl")
     if tgt_pt is not None:
         joblib.dump(tgt_pt, f"{art_dir}/target_transformer.pkl")
-    logger.info(f"📦 Artifacts saved → {art_dir}")
+    logger.info(f"Artifacts saved → {art_dir}")
 
 
 def main():
@@ -137,7 +136,7 @@ def main():
         random_state=p.get("random_state", 42),
         transform_target=p.get("transform_target", True),
     )
-    logger.info("🎉 Preprocessing done")
+    logger.info("Preprocessing done")
 
 
 if __name__ == "__main__":

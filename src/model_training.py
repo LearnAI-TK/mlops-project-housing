@@ -127,7 +127,7 @@ def validate_data(X, y, dataset_name="Dataset"):
     assert not y.isnull().any(), f"NaN values found in {dataset_name} target"
     assert X.shape[0] == y.shape[0], f"Shape mismatch: X={X.shape[0]}, y={y.shape[0]}"
     assert len(X.columns) > 0, "No features found"
-    logger.info(f"{dataset_name} data validated ✅")
+    logger.info(f"{dataset_name} data validated")
 
 
 def train_and_log_model(
@@ -205,13 +205,13 @@ def train_and_log_model(
             missing_artifacts = []
             for name, path in expected_artifacts.items():
                 if not os.path.exists(path):
-                    logger.error(f"❌ Expected artifact file NOT found: {path}")
+                    logger.error(f"Expected artifact file NOT found: {path}")
                     missing_artifacts.append(name)
                 else:
-                    logger.debug(f"✅ Confirmed artifact file exists: {path}")
+                    logger.debug(f"Confirmed artifact file exists: {path}")
             if missing_artifacts:
                 error_msg = f"Failed to create required local artifact files: {missing_artifacts}"
-                logger.error(f"❌ {error_msg}")
+                logger.error(f"{error_msg}")
                 raise FileNotFoundError(error_msg)
             else:
                 logger.info(
@@ -219,7 +219,7 @@ def train_and_log_model(
                 )
             # --- Logging Artifacts to MLflow (Directly into 'preprocessing' path) ---
             logger.info(
-                "📥 Logging preprocessing artifacts to MLflow under 'preprocessing' path..."
+                "Logging preprocessing artifacts to MLflow under 'preprocessing' path..."
             )
             logged_count = 0
             for artifact_name, local_file_path in expected_artifacts.items():
@@ -227,26 +227,26 @@ def train_and_log_model(
                     # Log each file directly into the 'preprocessing' artifact directory in MLflow
                     mlflow.log_artifact(local_file_path, artifact_path="preprocessing")
                     logger.info(
-                        f"  📤 Successfully logged {artifact_name} to MLflow 'preprocessing' path."
+                        f"Successfully logged {artifact_name} to MLflow 'preprocessing' path."
                     )
                     logged_count += 1
                 except Exception as log_err:
                     logger.error(
-                        f"  ❌ Failed to log {artifact_name} to MLflow: {log_err}"
+                        f"Failed to log {artifact_name} to MLflow: {log_err}"
                     )
                     # Depending on your policy, you might want to raise an error here
                     # if logging artifacts is critical. For now, we'll log the error.
             if logged_count == 0:
                 error_msg = "Failed to log any preprocessing artifacts to MLflow."
-                logger.error(f"❌ {error_msg}")
+                logger.error(f"{error_msg}")
                 raise RuntimeError(error_msg)
             elif logged_count < len(expected_artifacts):
                 logger.warning(
-                    f"⚠️  Only {logged_count}/{len(expected_artifacts)} artifacts were successfully logged to MLflow."
+                    f"Only {logged_count}/{len(expected_artifacts)} artifacts were successfully logged to MLflow."
                 )
             else:
                 logger.info(
-                    "✅ All preprocessing artifacts successfully logged to MLflow 'preprocessing' path."
+                    "All preprocessing artifacts successfully logged to MLflow 'preprocessing' path."
                 )
             # Log model metadata
             mlflow.log_params(params)
@@ -313,7 +313,7 @@ def train_and_log_model(
             )
             mlflow.set_tag("run_status", "success")
             logger.info(f" Logged {model_name} with MLflow. Run ID: {run.info.run_id}")
-            logger.info(f"📈 Metrics - RMSE: {rmse:.4f}, R²: {r2:.4f}")
+            logger.info(f"Metrics - RMSE: {rmse:.4f}, R²: {r2:.4f}")
             logger.info(
                 "View in UI: "
                 f"{mlflow.get_tracking_uri()}/#/experiments/"
@@ -322,7 +322,7 @@ def train_and_log_model(
             return run.info.run_id, rmse, r2
     except Exception as e:
         mlflow.set_tag("run_status", "failed")
-        logger.error(f"❌ Failed to train/log model {model_name}: {e}", exc_info=True)
+        logger.error(f"Failed to train/log model {model_name}: {e}", exc_info=True)
         raise e
 
 
@@ -375,7 +375,7 @@ def main(
     test_target_path="data/processed/test_target.csv",
     model_name="CaliforniaHousingRegressor",
 ):
-    logger.info("🚀 Starting model training pipeline...")
+    logger.info("Starting model training pipeline...")
     logger.info(f"Project root determined to be: {project_root}")
     # --- Log System Metrics for Overall Run ---
     logger.info("Collecting system metrics for the overall training run...")
@@ -433,8 +433,8 @@ def main(
             dt_rmse,
             dt_r2,
         )
-    logger.info(f"🏆 Best model: {best_model_name} (Run ID: {best_run_id})")
-    logger.info(f"   RMSE: {best_rmse:.4f}, R²: {best_r2:.4f}")
+    logger.info(f"Best model: {best_model_name} (Run ID: {best_run_id})")
+    logger.info(f"RMSE: {best_rmse:.4f}, R²: {best_r2:.4f}")
     # Promote to @staging
     logger.info("Initializing MLflow Client for promotion...")
     client = MlflowClient()
@@ -450,7 +450,7 @@ def main(
         logger.warning(f"Waiting for model version... (attempt {attempt + 1}/10)")
         time.sleep(2)  # Consider if this wait is necessary or too long
     if not version:
-        error_msg = "❌ No model version found for best run."
+        error_msg = "No model version found for best run."
         logger.error(error_msg)
         # Raising an exception is generally better than sys.exit in library code/functions
         # but sys.exit is okay in a main script if you want to stop the whole process.
@@ -459,9 +459,9 @@ def main(
         raise RuntimeError(error_msg)
     success = _promote_with_alias(client, model_name, version, alias="staging")
     if success:
-        logger.info(f"✅ Model {model_name} v{version} promoted to alias 'staging'")
+        logger.info(f"Model {model_name} v{version} promoted to alias 'staging'")
     else:
-        logger.error(f"❌ Failed to promote model {model_name} v{version}")
+        logger.error(f"Failed to promote model {model_name} v{version}")
         # Depending on requirements, you might want to raise an error here too.
         # raise RuntimeError(f"Failed to promote model {model_name} v{version}")
 
@@ -495,7 +495,7 @@ def main(
     logger.info("Logged overall system metric deltas.")
     mlflow.log_metric("pipeline_total_duration_seconds", overall_duration)
     # --- End Overall Metrics Logging ---
-    logger.info("🎉 Training complete.")
+    logger.info("Training complete.")
 
 
 if __name__ == "__main__":

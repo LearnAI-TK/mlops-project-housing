@@ -357,7 +357,7 @@ def load_model_for_current_alias(redownload_artifacts: bool = True) -> str:
     run_id, version = mv.run_id, mv.version
     model_version_str = f"{MODEL_NAME}_v{version}"
     logger.info(
-        f"🎯 Using version {version} (run_id={run_id}) for alias '{MODEL_ALIAS}'"
+        f"Using version {version} (run_id={run_id}) for alias '{MODEL_ALIAS}'"
     )
 
     # --- Download to the PARENT dir to avoid nested preprocessing/preprocessing ---
@@ -365,7 +365,7 @@ def load_model_for_current_alias(redownload_artifacts: bool = True) -> str:
         download_root = MODEL_DIR
         os.makedirs(download_root, exist_ok=True)
         try:
-            logger.info(f"📥 Downloading preprocessing artifacts from run {run_id} …")
+            logger.info(f"Downloading preprocessing artifacts from run {run_id} …")
             client.download_artifacts(run_id, "preprocessing", dst_path=download_root)
         except Exception as e:
             logger.warning(
@@ -492,7 +492,7 @@ def load_model_for_current_alias(redownload_artifacts: bool = True) -> str:
     )
 
     logger.info(
-        "✅ Preprocessing set. "
+        "Preprocessing set. "
         f"scaler={'Identity' if isinstance(scaler, _Identity) else 'Loaded'}, "
         f"transformer={'Identity' if isinstance(feature_transformer, _Identity) else 'Loaded'}, "
         f"feature_names={len(feature_names)}"
@@ -500,9 +500,9 @@ def load_model_for_current_alias(redownload_artifacts: bool = True) -> str:
 
     # Load model via alias (artifacts backed by shared /mlflow)
     model_uri = f"models:/{MODEL_NAME}@{MODEL_ALIAS}"
-    logger.info(f"📥 Loading model: {model_uri}")
+    logger.info(f"Loading model: {model_uri}")
     ml_model = mlflow.sklearn.load_model(model_uri)
-    logger.info("✅ Model loaded.")
+    logger.info("Model loaded.")
     return str(version)
 
 
@@ -516,11 +516,11 @@ async def lifespan(app: FastAPI):
         init_db()
         load_model_for_current_alias(redownload_artifacts=True)
     except Exception as e:
-        logger.critical(f"❌ API init failed: {e}", exc_info=True)
+        logger.critical(f"API init failed: {e}", exc_info=True)
         ml_model = None
         scaler = feature_transformer = feature_names = target_transformer = None
     yield
-    logger.info("🛑 API shutting down.")
+    logger.info("API shutting down.")
 
 
 # ======================================
@@ -959,7 +959,7 @@ async def retrain():
         try:
             client.set_registered_model_alias(MODEL_NAME, "staging", version)
             promotion_message = f"Model {MODEL_NAME} v{version} promoted to staging"
-            logger.info(f"✅ {promotion_message}")
+            logger.info(f"{promotion_message}")
         except Exception as alias_e:
             logger.warning(f"Alias API failed: {alias_e} → tagging fallback")
             client.set_model_version_tag(MODEL_NAME, version, "alias", "staging")
